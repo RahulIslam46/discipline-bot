@@ -2,12 +2,10 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from database import Base, engine, get_db
+from database import get_db
 from model import ActivityLog, PomodoroSession
 import datetime
 from typing import Literal, Optional, List
-
-Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="Discipline Agent API",
