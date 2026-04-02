@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from database import Base, engine, get_db
 from model import ActivityLog, PomodoroSession
 import datetime
-from typing import Optional, List
+from typing import Literal, Optional, List
 
 Base.metadata.create_all(bind=engine)
 
@@ -33,7 +33,7 @@ class LogCreate(BaseModel):
     notes: Optional[str] = None
 
 class PomodoroCreate(BaseModel):
-    session_type: str  # "work" or "break"
+    session_type: Literal["work", "break"]
 
 class ActivityResponse(BaseModel):
     id: int
@@ -79,12 +79,12 @@ def create_activity_log(log: LogCreate, db: Session = Depends(get_db)):
     db.refresh(entry)
     return entry
 
-@app.get("/logs", response_model=List[ActivityResponse])
+@app.get("/activity-logs", response_model=List[ActivityResponse])
 def get_logs(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     logs = db.query(ActivityLog).order_by(ActivityLog.timestamp.desc()).offset(skip).limit(limit).all()
     return logs
 
-@app.get("/logs/today", response_model=List[ActivityResponse])
+@app.get("/activity-logs/today", response_model=List[ActivityResponse])
 def get_logs_today(db: Session = Depends(get_db)):
     today = datetime.date.today()
     logs = (
@@ -95,7 +95,7 @@ def get_logs_today(db: Session = Depends(get_db)):
     )
     return logs
 
-@app.delete("/logs/{log_id}")
+@app.delete("/activity-logs/{log_id}")
 def delete_log(log_id: int, db: Session = Depends(get_db)):
     log = db.query(ActivityLog).filter(ActivityLog.id == log_id).first()
     if not log:
