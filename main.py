@@ -1,3 +1,4 @@
+import os
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -6,6 +7,18 @@ from database import get_db
 from model import ActivityLog, PomodoroSession
 import datetime
 from typing import Literal, Optional, List
+from dotenv import load_dotenv  
+from groq import Groq
+
+load_dotenv()  # Load environment variables from .env file
+
+def _get_groq_client() -> Optional[Groq]:
+    api_key = os.getenv("GROQ_API_KEY") or os.getenv("GRoQO_API_KEY")
+    if not api_key:
+        return None
+    return Groq(api_key=api_key)
+
+groq_client = _get_groq_client()
 
 app = FastAPI(
     title="Discipline Agent API",
@@ -53,6 +66,11 @@ class PomodoroResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class PomodoroCompleteResponse(BaseModel):
+    session: PomodoroResponse
+    ai_message: Optional[str] = None
 
 # ── Root ─────────────────────────────────────────────────
 
@@ -112,7 +130,7 @@ def create_pomodoro(data: PomodoroCreate, db: Session = Depends(get_db)):
     db.refresh(session)
     return session
 
-@app.patch("/pomodoro/{session_id}/complete", response_model=PomodoroResponse)
+@app.patch("/pomodoro/{session_id}/complete", response_model=PomodoroCompleteResponse)
 def complete_pomodoro(session_id: int, db: Session = Depends(get_db)):
     session = db.query(PomodoroSession).filter(PomodoroSession.id == session_id).first()
     if not session:
@@ -121,7 +139,21 @@ def complete_pomodoro(session_id: int, db: Session = Depends(get_db)):
     setattr(session, "end_time", datetime.datetime.now(datetime.timezone.utc))
     db.commit()
     db.refresh(session)
-    return session
+
+    ai_message: Optional[str] = None
+    if groq_client is not None:
+        ai_response = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {
+                    "role": "system",
+                    "content": f"You completed a {session.session_type} session. Provide a motivational message and a productivity tip to keep up the good work.",
+                },
+            ],
+        )
+        ai_message = ai_response.choices[0].message.content
+
+    return {"session": session, "ai_message": ai_message}
 
 @app.get("/pomodoro/stats")
 def get_pomodoro_stats(db: Session = Depends(get_db)):
